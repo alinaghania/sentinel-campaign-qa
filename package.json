@@ -1,0 +1,53 @@
+{
+  "name": "campaign-qa",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "seed": "node scripts/seed.mjs",
+    "render:login": "node scripts/render-login.mjs",
+    "push:renders": "bash scripts/azure/push-renders.sh",
+    "extract:template": "node scripts/extract-template.mjs",
+    "extract:template:check": "node scripts/extract-template.mjs --check",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@azure/data-tables": "^13.3.2",
+    "@joplin/turndown-plugin-gfm": "^1.0.67",
+    "cheerio": "^1.2.0",
+    "exceljs": "^4.4.0",
+    "googleapis": "^173.0.0",
+    "image-size": "^2.0.2",
+    "imapflow": "^1.7.6",
+    "isomorphic-dompurify": "^3.18.0",
+    "lucide-react": "^1.25.0",
+    "mailparser": "^3.9.14",
+    "next": "16.2.10",
+    "officeparser": "^7.3.0",
+    "p-limit": "^7.3.0",
+    "pdf-parse": "^2.4.5",
+    "playwright": "^1.61.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-letter": "^0.4.1",
+    "turndown": "^7.2.4",
+    "xlsx": "^0.18.5",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/mailparser": "^3.4.6",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/turndown": "^5.0.6",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,0 +1,32 @@
+# Contexte docker minimal — tout ce qui n'est pas nécessaire au build est exclu
+# (le build ACR uploade le contexte : chaque Mo compte).
+
+# Dépendances et sorties de build (réinstallées/regénérées dans l'image)
+node_modules
+.next
+tsconfig.tsbuildinfo
+
+# Données locales et profil navigateur Playwright (migrées via Azure Files)
+.data
+.playwright
+
+# Git et environnement (JAMAIS de secrets dans l'image)
+.git
+.env*
+
+# Documentation, exemples et scripts inutiles au runtime
+docs
+samples
+*.md
+scripts/render-login.mjs
+
+# Infra et scripts de déploiement (pas nécessaires dans l'image)
+infra
+scripts/azure
+
+# Divers
+.DS_Store
+.vercel
+coverage
+Dockerfile
+.dockerignore

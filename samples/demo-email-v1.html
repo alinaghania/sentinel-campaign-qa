@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brume visage MAPAUSE</title>
+</head>
+<body style="margin:0;padding:0;background-color:#F8F6F1;font-family:Georgia,serif;">
+  <!-- Préheader resté en placeholder (anomalie) -->
+  <div style="display:none;max-height:0;overflow:hidden;">Preheader TBD</div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F8F6F1;">
+    <tr>
+      <td align="center" style="padding:12px;font-size:11px;color:#8a8a8a;">
+        <!-- Variable AMPscript sans RedirectTo (anomalie) -->
+        <a href="%%=v(@view_online_url)=%%" style="color:#8a8a8a;">Voir cet email en ligne</a>
+      </td>
+    </tr>
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;">
+          <tr>
+            <td align="center" style="padding:24px;">
+              <!-- Logo cassé (asset supprimé du CDN), sans alt (anomalies) -->
+              <img src="https://cdn.aurapause-assets.example/logo-2024.png" width="160" height="48">
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:0 40px;">
+              <!-- Token de personnalisation avec typo (anomalie) -->
+              <p style="font-size:16px;color:#3a3a3a;">Bonjour %%firstnme%%,</p>
+              <h1 style="font-size:28px;color:#7E8C69;font-weight:normal;">Ta nouvelle alliée fraîcheur est arrivée</h1>
+              <!-- Tutoiement (violation charte) -->
+              <p style="font-size:15px;color:#555;line-height:1.6;">
+                Découvre la brume visage <strong>MAPAUSE Aura</strong> : un geste frais et apaisant
+                contre tes bouffées de chaleur, où que tu sois. Glisse-la dans ton sac et profite
+                de l'été en toute sérénité.
+              </p>
+              <p style="font-size:15px;color:#555;">
+                <!-- Code promo différent du brief : brief dit AURA20 (anomalie) -->
+                Avec le code <strong style="letter-spacing:2px;">AURA30</strong>, la livraison est offerte.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:28px;">
+              <a href="https://aurapause.com/?utm_source=sfmc&utm_medium=email&utm_campaign=lancement_brume_ete"
+                 style="background:#7E8C69;color:#fff;padding:14px 36px;text-decoration:none;font-size:14px;letter-spacing:1px;">
+                JE DÉCOUVRE
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 40px 24px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td width="50%" align="center" style="padding:8px;">
+                    <!-- Visuel placeholder non final, sans alt (anomalies) -->
+                    <img src="https://picsum.photos/id/103/260/200" width="260" height="200" style="display:block;">
+                    <!-- utm_campaign incohérent : casse différente (anomalie) -->
+                    <a href="https://aurapause.com/ingredients?utm_source=sfmc&utm_medium=email&utm_campaign=Lancement-Brume-Ete"
+                       style="font-size:13px;color:#7E8C69;">Les ingrédients</a>
+                  </td>
+                  <td width="50%" align="center" style="padding:8px;">
+                    <!-- Visuel placeholder non final, sans alt (anomalies) -->
+                    <img src="https://picsum.photos/id/152/260/200" width="260" height="200" style="display:block;">
+                    <!-- Lien vers staging (anomalie) -->
+                    <a href="https://staging.aurapause.com/temoignages?utm_source=sfmc&utm_medium=email&utm_campaign=lancement_brume_ete"
+                       style="font-size:13px;color:#7E8C69;">Les témoignages</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:12px 40px 28px;">
+              <!-- Lien social avec espace non encodé + sans UTM (anomalies) -->
+              <a href="https://www.instagram.com/ma pause" style="font-size:13px;color:#8a8a8a;">Instagram</a>
+              &nbsp;·&nbsp;
+              <!-- Double ?? dans la query string (anomalie) -->
+              <a href="https://aurapause.com/notre-histoire??utm_source=sfmc&utm_medium=email" style="font-size:13px;color:#8a8a8a;">Notre histoire</a>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="background:#7E8C69;padding:24px 40px;font-size:11px;color:#e8e5dd;">
+              <!-- Année périmée (anomalie) + mention promo absente (anomalie) -->
+              <p>© 2025 MAPAUSE — Paris</p>
+              <p>
+                <!-- Lien de désinscription vide (anomalie CRITIQUE) -->
+                <a href="#" style="color:#e8e5dd;">Se désinscrire</a>
+                &nbsp;·&nbsp;
+                <a href="https://aurapause.com/politique-confidentialite?utm_source=sfmc&utm_medium=email&utm_campaign=lancement_brume_ete" style="color:#e8e5dd;">Confidentialité</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
