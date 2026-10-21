@@ -6,7 +6,7 @@
 //        l'accès à la plateforme est partagé (un seul mot de passe).
 
 import { NextRequest, NextResponse } from "next/server";
-import { Settings, updateSettings } from "@/lib/store";
+import { Brands, Settings, updateSettings } from "@/lib/store";
 import {
   HISTORY_MAX,
   RuleConfigWriteSchema,
@@ -26,10 +26,37 @@ export const dynamic = "force-dynamic";
  *  déroule. Le reste s'obtient avec ?history=all. */
 const HISTORY_PAGE = 10;
 
+/** Portée de la requête : `?brandId=` désigne les écarts d'UNE marque, absent =
+ *  config globale. Une marque inconnue est refusée plutôt que de créer une
+ *  config orpheline que rien n'afficherait. */
+async function scopeOf(
+  req: NextRequest
+): Promise<{ brandId: string | null } | { error: NextResponse }> {
+  const brandId = req.nextUrl.searchParams.get("brandId");
+  if (!brandId) return { brandId: null };
+  if (!(await Brands.get(brandId))) {
+    return { error: NextResponse.json({ error: "Unknown brand." }, { status: 404 }) };
+  }
+  return { brandId };
+}
+
 export async function GET(req: NextRequest) {
-  const cfg = (await Settings.get()) ?? emptyRuleConfig();
+  const scope = await scopeOf(req);
+  if ("error" in scope) return scope.error;
+  const { brandId } = scope;
+  const cfg = (await Settings.get(brandId)) ?? emptyRuleConfig();
+  // Vue marque : la page a besoin de la config globale pour afficher ce qui
+  // s'applique réellement (global + écarts de la marque) et ne renvoyer que
+  // les écarts de la marque.
+  const global = brandId ? ((await Settings.get()) ?? emptyRuleConfig()) : null;
   const wantsAll = req.nextUrl.searchParams.get("history") === "all";
   return NextResponse.json({
+    brandId,
+    base: global && {
+      overrides: global.overrides,
+      customRules: global.customRules,
+      customCategories: global.customCategories ?? [],
+    },
     catalog: ALL_CATALOG,
     // Pas de `agentChoices` ici : la liste des agents proposables est importée
     // en dur par la page depuis lib/agent-catalog.ts (module sans dépendances,
@@ -51,6 +78,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const scope = await scopeOf(req);
+  if ("error" in scope) return scope.error;
+  const { brandId } = scope;
   let raw: unknown;
   try {
     raw = await req.json();
@@ -75,8 +105,14 @@ export async function PUT(req: NextRequest) {
   // Le serveur accepte donc exactement ce que l'écran propose, sans que rien ne
   // circule entre les deux. Le lui repasser d'ici ne ferait que rouvrir la
   // possibilité de passer autre chose que le référentiel.
+  // Marque : ses règles peuvent se ranger dans une catégorie créée au niveau
+  // global, qui n'est pas dans CETTE écriture — on la déclare pour la validation.
+  const globalCategories = brandId ? ((await Settings.get())?.customCategories ?? []) : [];
   const errors = [
-    ...validateAgainstCatalog(body),
+    ...validateAgainstCatalog({
+      ...body,
+      customCategories: [...globalCategories, ...body.customCategories],
+    }),
     ...findPii(body.customRules, body.overrides),
   ];
   if (errors.length > 0) {
@@ -101,7 +137,7 @@ export async function PUT(req: NextRequest) {
 
     const now = new Date().toISOString();
     const next: RuleConfig = {
-      id: "default",
+      id: brandId ? `brand-${brandId}` : "default",
       overrides: body.overrides,
       customRules: body.customRules,
       customCategories: body.customCategories,
@@ -129,7 +165,7 @@ export async function PUT(req: NextRequest) {
         ...prev.history,
       ].slice(0, HISTORY_MAX),
     };
-    await Settings.put(next);
+    await Settings.put(next, brandId);
 
     return NextResponse.json({
       overrides: next.overrides,
@@ -141,5 +177,5 @@ export async function PUT(req: NextRequest) {
       history: next.history.slice(0, HISTORY_PAGE),
       historyTotal: next.history.length,
     });
-  });
+  }, brandId);
 }

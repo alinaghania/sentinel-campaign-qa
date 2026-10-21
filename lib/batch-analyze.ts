@@ -6,8 +6,8 @@
 // la déconnexion du client n'interrompt rien, l'UI streame via
 // GET /api/campaigns/[id]/analyze?jobId=X (replay + tail).
 
-import { Brands, Campaigns, Reports, Settings, updateCampaign } from "./store";
-import { resolveRuleConfig } from "./rule-config";
+import { Brands, Campaigns, Reports, updateCampaign } from "./store";
+import { loadRuleConfig } from "./rule-scope";
 import { analyze, type AnalyzeEvent } from "./analyze";
 import { appendEvent, createJob, finishJob } from "./jobs";
 import { parseEmailFacts } from "./parse-email";
@@ -63,7 +63,7 @@ export async function startBatchAnalysis(
   // Config lue UNE fois pour tout le lot : les déclinaisons d'une même campagne
   // sont jugées avec la même configuration, même si quelqu'un sauvegarde /rules
   // pendant l'exécution (sinon deux mails du même lot deviennent incomparables).
-  const ruleConfig = resolveRuleConfig(await Settings.get());
+  const ruleConfig = await loadRuleConfig(campaign.brandId);
   const job = await createJob({
     campaignId: campaign.id,
     versionIds: versions.map((v) => v.id),

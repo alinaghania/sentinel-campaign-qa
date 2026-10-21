@@ -57,6 +57,7 @@ import {
 // tout de suite. La même liste passée par le réseau ne casserait rien et
 // laisserait un <select> vide en production.
 import { AGENT_CHOICES } from "@/lib/agent-catalog";
+import { diffOverrides, mergeCategories, mergeOverrides } from "@/lib/rule-overlay";
 import type {
   CustomCategory,
   CustomRule,
@@ -66,7 +67,35 @@ import type {
   RuleOverride,
 } from "@/lib/rule-config";
 
+/** Vue d'ÉDITION d'un payload. En vue marque l'écran montre ce qui s'applique
+ *  réellement (global + écarts de la marque) ; seuls les écarts de la marque
+ *  repartent à l'enregistrement (diffOverrides). Les règles custom restent
+ *  celles de la marque seule : les globales s'appliquent aussi, mais s'éditent
+ *  dans la vue globale. */
+function toView(p: RulesPayload): RulesPayload {
+  if (!p.base) return p;
+  return {
+    ...p,
+    overrides: mergeOverrides(p.base.overrides, p.overrides),
+    customCategories: mergeCategories(p.base.customCategories, p.customCategories ?? []),
+  };
+}
+
+interface BrandOption {
+  id: string;
+  name: string;
+}
+
 interface RulesPayload {
+  /** null = config globale ; sinon les écarts de cette marque. */
+  brandId?: string | null;
+  /** Présent en vue marque : la config globale sur laquelle les écarts de la
+   *  marque se posent. */
+  base?: {
+    overrides: Record<string, RuleOverride>;
+    customRules: CustomRule[];
+    customCategories: CustomCategory[];
+  } | null;
   catalog: RuleCatalogEntry[];
   overrides: Record<string, RuleOverride>;
   customRules: CustomRule[];
@@ -209,12 +238,21 @@ export default function RulesPage() {
 
   const loadSeq = useRef(0);
 
-  async function load() {
+  // Portée : null = règles globales, sinon une marque (ses écarts se posent
+  // sur les globales). `?brand=<id>` permet d'y arriver par lien.
+  const [brands, setBrands] = useState<BrandOption[]>([]);
+  // Lu à l'initialisation : le sélecteur n'est rendu qu'une fois `data` chargée
+  // (donc jamais côté serveur), ce qui évite tout écart d'hydratation.
+  const [brandId, setBrandId] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("brand")
+  );
+
+  async function load(scope: string | null = brandId) {
     const seq = ++loadSeq.current;
     try {
-      const res = await fetch("/api/rules");
+      const res = await fetch(scope ? `/api/rules?brandId=${encodeURIComponent(scope)}` : "/api/rules");
       if (!res.ok) throw new Error();
-      const payload: RulesPayload = await res.json();
+      const payload = toView(await res.json());
       if (seq !== loadSeq.current) return;
       setData(payload);
       setOverrides(payload.overrides);
@@ -227,8 +265,16 @@ export default function RulesPage() {
   }
 
   useEffect(() => {
-    void load();
+    fetch("/api/brands")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: BrandOption[]) => setBrands(list.map((b) => ({ id: b.id, name: b.name }))))
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    void load(brandId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brandId]);
 
   const dirty = useMemo(() => {
     if (!data) return false;
@@ -365,13 +411,19 @@ export default function RulesPage() {
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await fetch("/api/rules", {
+      const base = data.base;
+      const res = await fetch(brandId ? `/api/rules?brandId=${encodeURIComponent(brandId)}` : "/api/rules", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          overrides,
+          // Vue marque : seuls les écarts par rapport au global sont enregistrés.
+          overrides: base ? diffOverrides(base.overrides, overrides) : overrides,
           customRules,
-          customCategories,
+          customCategories: base
+            ? customCategories.filter(
+                (c) => !base.customCategories.some((g) => g.id === c.id && g.label === c.label)
+              )
+            : customCategories,
           version: data.version,
           updatedBy: author.trim() || undefined,
           changeReason: changeReason.trim() || undefined,
@@ -382,10 +434,11 @@ export default function RulesPage() {
         setSaveError(payload.details?.length ? payload.details : [payload.error ?? "Save failed."]);
         return;
       }
-      setData({ ...data, ...payload });
-      setOverrides(payload.overrides);
-      setCustomRules(payload.customRules);
-      setCustomCategories(payload.customCategories ?? []);
+      const view = toView({ ...data, ...payload });
+      setData(view);
+      setOverrides(view.overrides);
+      setCustomRules(view.customRules);
+      setCustomCategories(view.customCategories ?? []);
       setChangeReason("");
       setSavedAt(new Date().toLocaleTimeString());
     } catch {
@@ -396,9 +449,10 @@ export default function RulesPage() {
   }
 
   function restoreDefaults() {
-    setOverrides({});
+    // Vue marque : "défaut" = ce que dit le global, pas le code.
+    setOverrides(data?.base?.overrides ?? {});
     setCustomRules([]);
-    setCustomCategories([]);
+    setCustomCategories(data?.base?.customCategories ?? []);
     setSelectedCategory(null);
   }
 
@@ -423,9 +477,14 @@ export default function RulesPage() {
   }
 
   function restoreVersion(entry: HistoryEntry) {
-    setOverrides(entry.overrides);
+    const base = data?.base;
+    setOverrides(base ? mergeOverrides(base.overrides, entry.overrides) : entry.overrides);
     setCustomRules(entry.customRules);
-    setCustomCategories(entry.customCategories ?? []);
+    setCustomCategories(
+      base
+        ? mergeCategories(base.customCategories, entry.customCategories ?? [])
+        : (entry.customCategories ?? [])
+    );
     setSelectedCategory(null);
   }
 
@@ -712,6 +771,37 @@ export default function RulesPage() {
         <p className="mt-1 max-w-3xl text-[12.5px] text-dim">
           What the agents check on every email. Turn one off, delete it, or add your own.
         </p>
+
+        {data && (
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <label className="text-[12.5px] font-medium" htmlFor="rules-scope">
+            Editing
+          </label>
+          <select
+            id="rules-scope"
+            className="input max-w-xs"
+            value={brandId ?? ""}
+            onChange={(e) => {
+              if (dirty && !window.confirm("You have unsaved changes. Switch anyway?")) return;
+              setBrandId(e.target.value || null);
+            }}
+          >
+            <option value="">Global rules (all brands)</option>
+            {brands.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name} only
+              </option>
+            ))}
+          </select>
+        </div>
+        )}
+        {data && brandId && (
+          <p className="mt-2 max-w-3xl text-[12.5px] text-dim">
+            These rules apply on top of the global ones, only to campaigns of this brand. A change here
+            wins over the global setting; rules you add here are checked in addition to the global custom
+            rules. Global custom rules are edited in the global view.
+          </p>
+        )}
       </div>
 
       {/* `border-fg` distingue le bandeau d'erreur d'une carte ordinaire. */}

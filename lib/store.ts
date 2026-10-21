@@ -298,9 +298,18 @@ export const Brands = {
 // Configuration des règles éditée depuis /rules — SINGLETON (une seule entrée
 // "default"). Absente tant que personne n'a rien modifié : les appelants
 // traitent null comme "tous les défauts du code" (cf. resolveRuleConfig).
+//
+// Une entrée PAR MARQUE s'y ajoute (clé `brand-<id>`) : les écarts de la marque
+// par rapport à la config globale (cf. lib/rule-overlay.ts). Sans `brandId`, on
+// lit/écrit la config globale.
+export function settingsKey(brandId?: string | null): string {
+  return brandId ? `brand-${brandId}` : "default";
+}
 export const Settings = {
-  get: () => store.get<RuleConfig>("settings", "default"),
-  put: (c: RuleConfig) => store.put("settings", "default", { ...c, id: "default" as const }),
+  get: (brandId?: string | null) => store.get<RuleConfig>("settings", settingsKey(brandId)),
+  put: (c: RuleConfig, brandId?: string | null) =>
+    store.put("settings", settingsKey(brandId), { ...c, id: settingsKey(brandId) }),
+  del: (brandId: string) => store.del("settings", settingsKey(brandId)),
 };
 
 // Écritures Settings SÉRIALISÉES, même raison que updateCampaign ci-dessus.
@@ -315,9 +324,10 @@ export const Settings = {
 // passer à plusieurs demanderait un verrou côté stockage, pas une Map.
 let settingsWriteChain: Promise<unknown> = Promise.resolve();
 export function updateSettings<T>(
-  apply: (prev: RuleConfig | null) => Promise<T>
+  apply: (prev: RuleConfig | null) => Promise<T>,
+  brandId?: string | null
 ): Promise<T> {
-  const run = async () => apply(await Settings.get());
+  const run = async () => apply(await Settings.get(brandId));
   const next = settingsWriteChain.then(run, run);
   settingsWriteChain = next.then(
     () => undefined,

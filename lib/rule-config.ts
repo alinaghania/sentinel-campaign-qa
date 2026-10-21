@@ -110,7 +110,8 @@ export interface RuleConfigHistoryEntry {
 }
 
 export interface RuleConfig {
-  id: "default";
+  /** "default" (global) ou `brand-<id>` (écarts d'une marque). */
+  id: string;
   overrides: Record<string, RuleOverride>;
   customRules: CustomRule[];
   customCategories: CustomCategory[];

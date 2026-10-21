@@ -22,11 +22,11 @@ import { dedupFindings, computeVerdict } from "./aggregate";
 import { detectEmailLanguage, type DetectedLanguage } from "./detect-language";
 import { canonLang } from "./lang-codes";
 import { resolveTemplate, type ResolvedTemplate } from "./template-resolve";
-import { Reports, Settings, uid } from "./store";
+import { Reports, uid } from "./store";
+import { loadRuleConfig } from "./rule-scope";
 import {
   customRulesAsBrandRules,
   isGuidelinesRule,
-  resolveRuleConfig,
   type ResolvedRuleConfig,
 } from "./rule-config";
 import { nonEmpty, templateConformanceRun } from "./template-conformance-run";
@@ -149,7 +149,7 @@ export async function analyze(opts: {
   template?: ResolvedTemplate | null;
 }): Promise<AnalysisReport> {
   const { campaign, version, brand, emit } = opts;
-  const ruleConfig = opts.ruleConfig ?? resolveRuleConfig(await Settings.get());
+  const ruleConfig = opts.ruleConfig ?? await loadRuleConfig(brand?.id ?? campaign.brandId);
   // Le template qui JUGE, et non la constante de code. Jusqu'ici `runCodeChecks`
   // lisait `DEFAULT_TEMPLATE` : l'éditeur écrivait dans le stockage, le classeur
   // téléchargé portait bien les champs ajoutés, et le juge continuait de mesurer

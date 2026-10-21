@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Brands } from "@/lib/store";
+import { Brands, Settings } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -47,5 +47,7 @@ export async function DELETE(
 ) {
   const { id } = await params;
   await Brands.del(id);
+  // Ses écarts de règles n'ont plus de marque à laquelle s'appliquer.
+  await Settings.del(id);
   return NextResponse.json({ ok: true });
 }
