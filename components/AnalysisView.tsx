@@ -1,7 +1,7 @@
 "use client";
 
 // Vue analyse : agents en direct (SSE) → se morphe en rapport à la fin.
-import { AlertTriangle, Check, CheckCircle2, Lightbulb, RotateCw, Sparkles } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Lightbulb, RotateCw, Send, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { VerdictBadge } from "@/components/badges";
 import { isBlocking } from "@/lib/aggregate";
@@ -89,8 +89,44 @@ export default function AnalysisView({
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const esRef = useRef<EventSource | null>(null);
+  // Sélection de findings à envoyer par email (ids), et état du formulaire d'envoi.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [sendTo, setSendTo] = useState("");
+  const [sendNote, setSendNote] = useState("");
+  const [sendState, setSendState] = useState<{ busy: boolean; msg?: string; ok?: boolean }>({
+    busy: false,
+  });
 
   useEffect(() => setReport(existingReport), [existingReport]);
+  // Dérivée du rapport courant : après une ré-analyse les ids changent, et une
+  // sélection périmée ne doit ni être comptée ni être envoyée.
+  const selectedIds = (report?.findings ?? []).filter((f) => selected.has(f.id)).map((f) => f.id);
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
+
+  async function sendSelection() {
+    if (!report) return;
+    setSendState({ busy: true });
+    try {
+      const res = await fetch(`/api/reports/${report.id}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: sendTo, findingIds: selectedIds, note: sendNote }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setSendState({ busy: false, ok: true, msg: `Sent ${data.sent} finding(s) to ${data.to.join(", ")}` });
+      setSelected(new Set());
+    } catch (e) {
+      setSendState({ busy: false, ok: false, msg: e instanceof Error ? e.message : String(e) });
+    }
+  }
 
   // Persistance cross-page : le jobId du run en cours est mémorisé en
   // localStorage pour pouvoir se rattacher au job (replay+tail) au remontage.
@@ -379,9 +415,64 @@ export default function AnalysisView({
       <AgentRuns agents={report.agents} />
 
       <div className="space-y-2">
+        {report.findings.length > 0 && (
+          <label className="flex items-center gap-2 text-[12px] text-dim">
+            <input
+              type="checkbox"
+              checked={selectedIds.length === report.findings.length}
+              onChange={(e) =>
+                setSelected(e.target.checked ? new Set(report.findings.map((f) => f.id)) : new Set())
+              }
+            />
+            Select all ({selectedIds.length}/{report.findings.length} selected)
+          </label>
+        )}
         {report.findings.map((f) => (
-          <FindingCard key={f.id} f={f} onReview={review} />
+          <FindingCard
+            key={f.id}
+            f={f}
+            onReview={review}
+            selected={selected.has(f.id)}
+            onToggle={toggleSelected}
+          />
         ))}
+        {(selectedIds.length > 0 || sendState.msg) && (
+          <div className="card sticky bottom-3 space-y-2 border-fg p-4">
+            {selectedIds.length > 0 && (
+              <>
+                <div className="text-[11px] font-bold uppercase tracking-[0.14em]">
+                  Email {selectedIds.length} selected finding{selectedIds.length === 1 ? "" : "s"}
+                </div>
+                <input
+                  type="text"
+                  className="w-full border border-bd px-2.5 py-1.5 text-[13px]"
+                  placeholder="Recipient(s), separated by commas"
+                  value={sendTo}
+                  onChange={(e) => setSendTo(e.target.value)}
+                />
+                <textarea
+                  className="w-full border border-bd px-2.5 py-1.5 text-[13px]"
+                  placeholder="Optional message"
+                  rows={2}
+                  value={sendNote}
+                  onChange={(e) => setSendNote(e.target.value)}
+                />
+                <button
+                  className="btn"
+                  disabled={sendState.busy || !sendTo.trim()}
+                  onClick={sendSelection}
+                >
+                  <Send size={14} /> {sendState.busy ? "Sending…" : "Send"}
+                </button>
+              </>
+            )}
+            {sendState.msg && (
+              <p className="text-xs" style={sendState.ok ? undefined : { color: "#b3261e" }}>
+                {sendState.msg}
+              </p>
+            )}
+          </div>
+        )}
         {active.length === 0 && (
           <div className="card p-6 text-center text-ok">
             No active findings — everything is resolved or clean.
@@ -803,10 +894,14 @@ function FindingCard({
   f,
   live,
   onReview,
+  selected,
+  onToggle,
 }: {
   f: Finding;
   live?: boolean;
   onReview?: (id: string) => void;
+  selected?: boolean;
+  onToggle?: (id: string) => void;
 }) {
   const treated = Boolean(f.review);
   return (
@@ -815,6 +910,15 @@ function FindingCard({
       style={treated ? { opacity: 0.45 } : undefined}
     >
       <div className="flex items-start gap-2.5">
+        {onToggle && (
+          <input
+            type="checkbox"
+            className="mt-1 shrink-0"
+            aria-label="Select this finding"
+            checked={Boolean(selected)}
+            onChange={() => onToggle(f.id)}
+          />
+        )}
         <div className="min-w-0 flex-1">
           <div className="text-[13.5px] font-bold leading-snug">
             {treated && <CheckCircle2 size={13} className="mr-1 inline text-ok" />}
