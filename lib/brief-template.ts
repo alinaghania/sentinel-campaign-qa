@@ -561,7 +561,7 @@ export async function buildTemplateWorkbook(tpl: BriefTemplate, fill?: TemplateF
  *  parenthésé retiré. Le suffixe est ce que les marchés ajoutent librement
  *  ("Subject Line (male & others)") — c'est une DÉCLINAISON du champ, pas un
  *  champ inconnu. Même convention que le regroupement de lib/checks-code.ts. */
-function normLabel(s: string): string {
+export function normLabel(s: string): string {
   return s
     .replace(/\s*\([^)]*\)\s*$/, "")
     .trim()

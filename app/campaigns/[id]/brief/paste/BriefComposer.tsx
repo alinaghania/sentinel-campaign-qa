@@ -27,7 +27,7 @@
 //    contenu avec lui ; retirer une colonne retire son contenu. Sans ça, `fill`
 //    garderait des clés que le serveur ne connaît plus et refuserait tout
 //    l'import pour du texte que l'écran n'affiche plus.
-import { ImagePlus, Loader2, Plus, Save, Table2, Trash2, X } from "lucide-react";
+import { ImagePlus, Loader2, Plus, Save, Table2, Trash2, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import type { BriefTemplateField } from "@/lib/brief-template";
@@ -36,6 +36,8 @@ import { LANG_LABEL, canonColumn, displayLang } from "@/lib/lang-codes";
 import { TEMPLATE_LABEL_MAX, checkTemplateCoherence, type TemplateProblem } from "@/lib/template-edit";
 import { looksLikeBlock, parseTsv } from "@/lib/tsv";
 import { GLOSSARY_MAX_CHARS, GLOSSARY_NOTE_MAX_CHARS } from "@/lib/glossary";
+import { gridToFill, templateGap } from "@/lib/brief-prefill";
+import type { BriefGrid, Campaign } from "@/lib/types";
 
 /** Code de la colonne MASTER (contenu non traduit) tel que l'attend
  *  /api/brief-template/compose. La chaîne vide est une VALEUR de son
@@ -123,6 +125,11 @@ export default function BriefComposer({
   const [savingTpl, setSavingTpl] = useState(false);
   const [saveNote, setSaveNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fileBusy, setFileBusy] = useState(false);
+  const [fileNote, setFileNote] = useState<string | null>(null);
+  // Grille lue du dernier fichier : sert à mesurer ce que le template ne sait
+  // pas porter, et à proposer un template qui le porte.
+  const [importedGrid, setImportedGrid] = useState<BriefGrid | null>(null);
 
   // ── Ce que la structure du brouillon implique ───────────────────────────
   const columns = useMemo(() => [MASTER, ...draft.languageColumns], [draft.languageColumns]);
@@ -440,6 +447,76 @@ export default function BriefComposer({
     setSaveNote(null);
   }
 
+  // ── Importer un FICHIER de brief ────────────────────────────────────────
+  // Le fichier passe par la route d'import habituelle (donc le même parseur,
+  // la même télémétrie), puis la grille lue REMPLIT le tableau. Rien n'est
+  // recopié ici : l'appariement est celui de `gridToFill`, qui reprend la
+  // règle de la mesure de conformité. La structure ENREGISTRÉE sert de
+  // référence, pas le brouillon : c'est elle que le serveur composera.
+  async function importFile(file: File) {
+    setFileBusy(true);
+    setError(null);
+    setFileNote(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/campaigns/${campaignId}/brief`, { method: "POST", body: form });
+      if (!res.ok) throw new Error("Brief import failed — unreadable file?");
+      const { campaign } = (await res.json()) as { campaign: Campaign };
+      if (!campaign.briefGrid) {
+        setFileNote(
+          `"${file.name}" was imported, but no multilingual grid could be read from it (PDF/PPT?) — there is nothing to pre-fill.`
+        );
+        return;
+      }
+      const { fill: parsed, cells } = gridToFill(campaign.briefGrid, saved);
+      setFill(parsed);
+      setImportedGrid(campaign.briefGrid);
+      setFileNote(`Filled ${cells} cell${cells === 1 ? "" : "s"} from "${file.name}".`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Brief import failed.");
+    } finally {
+      setFileBusy(false);
+    }
+  }
+
+  // Ce que le template (brouillon compris) ne peut pas porter de ce fichier.
+  // Recalculé à chaque changement de structure : la proposition disparaît d'elle-
+  // même dès que les champs sont ajoutés.
+  const gap = useMemo(() => (importedGrid ? templateGap(importedGrid, draft) : null), [importedGrid, draft]);
+  const hasGap = gap !== null && (gap.rows.length > 0 || gap.languageColumns.length > 0);
+
+  /** Étend le BROUILLON pour qu'il contienne le brief, puis remplit le tableau.
+   *  Rien n'est enregistré : « Save template » reste le geste qui décide — et le
+   *  serveur CRÉE une copie dédiée à la campagne quand le template est partagé. */
+  function adaptTemplateToBrief() {
+    if (!importedGrid || !gap) return;
+    const stamp = Date.now().toString(36);
+    let offset = Math.max(0, ...draft.fields.map((f) => f.rowOffset));
+    const fields: BriefTemplateField[] = gap.rows.map((r, i) => ({
+      key: `field-${stamp}-${i}`,
+      label: r.label,
+      description: "",
+      master: "",
+      rowOffset: ++offset,
+      kind: r.kind,
+      required: false,
+      translatable: r.translatable,
+    }));
+    const next: Declaration = {
+      ...draft,
+      fields: [...draft.fields, ...fields],
+      languageColumns: [...draft.languageColumns, ...gap.languageColumns],
+      languages: [
+        ...draft.languages,
+        ...gap.languageColumns.map((code) => ({ code, name: displayLang(code) })),
+      ],
+    };
+    setDraft(next);
+    setFill(gridToFill(importedGrid, next).fill);
+    setStructureOpen(true);
+  }
+
   // ── Importer le brief ───────────────────────────────────────────────────
   async function submit() {
     if (filledCells === 0 || busy || dirty) return;
@@ -496,7 +573,7 @@ export default function BriefComposer({
     }
   }
 
-  const locked = busy !== null || savingTpl;
+  const locked = busy !== null || savingTpl || fileBusy;
 
   return (
     <>
@@ -521,8 +598,23 @@ export default function BriefComposer({
             <span className="block text-dim">Version</span>
             <span className="font-mono font-bold">v{stamp.version}</span>
           </div>
+          <label className="btn ml-auto cursor-pointer gap-2">
+            {fileBusy ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+            {fileBusy ? "Reading file…" : "Import brief file"}
+            <input
+              type="file"
+              className="hidden"
+              accept=".xlsx,.xlsm,.xls,.pdf,.pptx,.ppt"
+              disabled={locked}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = ""; // permet de re-choisir le même fichier
+                if (f) importFile(f);
+              }}
+            />
+          </label>
           <button
-            className="btn btn-ghost ml-auto gap-2"
+            className="btn btn-ghost gap-2"
             onClick={() => setStructureOpen((v) => !v)}
             disabled={locked}
           >
@@ -534,6 +626,35 @@ export default function BriefComposer({
             du stockage et jamais deviné ici : « je modifie le mien » et « j'en
             crée un » ne doivent pas se ressembler au moment du clic. */}
         <p className="text-[11px] text-dim">{own.reason}</p>
+        {fileNote && <p className="text-[12px]">{fileNote}</p>}
+        {hasGap && gap && (
+          <div className="border-l-4 border-l-[color:var(--major)] bg-panel2 p-3 text-[12px]">
+            <p className="font-bold">This template cannot hold everything in your file.</p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-dim">
+              {gap.rows.length > 0 && (
+                <li>
+                  {gap.rows.length} row{gap.rows.length === 1 ? "" : "s"} match no field:{" "}
+                  {gap.rows.map((r) => r.label).join(", ")}
+                </li>
+              )}
+              {gap.languageColumns.length > 0 && (
+                <li>Missing language columns: {gap.languageColumns.join(", ")}</li>
+              )}
+            </ul>
+            <p className="mt-1 text-dim">
+              Importing from this table as it is would drop them. A template that matches this
+              brief adds them as fields and columns; nothing is saved until you press Save template.
+            </p>
+            <button className="btn mt-2" onClick={adaptTemplateToBrief} disabled={locked}>
+              <Plus size={14} /> Create a template matching this brief
+            </button>
+          </div>
+        )}
+        {gap && gap.unsupportedLanguages.length > 0 && (
+          <p className="text-[11px] text-dim">
+            Languages the platform cannot carry as columns: {gap.unsupportedLanguages.join(", ")}.
+          </p>
+        )}
       </div>
 
       {/* ── Ce qui empêche, ce qui informe ──────────────────────────────── */}

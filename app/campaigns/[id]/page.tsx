@@ -3,7 +3,6 @@
 // Fiche campagne : brief en rail gauche persistant + onglets Email / Rapport.
 import { BarChart3, Check, ChevronLeft, FileSpreadsheet, Inbox, Loader2, Mail, Sparkles, Table2, Upload, X } from "lucide-react";
 import { use, useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { StatusBadge, VerdictBadge } from "@/components/badges";
 import EmailPreview from "@/components/EmailPreview";
 import AnalysisView from "@/components/AnalysisView";
@@ -31,14 +30,12 @@ export default function CampaignPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const router = useRouter();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [reports, setReports] = useState<AnalysisReport[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [tab, setTab] = useState<"email" | "rapport">("email");
   const [versionIdx, setVersionIdx] = useState<number>(-1);
   const [previewMode, setPreviewMode] = useState<string>("gmail");
-  const [briefImportBusy, setBriefImportBusy] = useState(false);
   const [realRenders, setRealRenders] = useState<
     Array<{ provider: "gmail" | "outlook"; device: string; url: string; capturedAt: string }>
   >([]);
@@ -218,23 +215,6 @@ export default function CampaignPage({
     marketRows.length > 0 &&
     marketRows.every((r) => r.verdict !== "—" && !isBlocking(r.verdict));
 
-  async function importBriefFile(file: File) {
-    setBriefImportBusy(true);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch(`/api/campaigns/${campaign!.id}/brief`, { method: "POST", body: form });
-      if (res.ok) {
-        // Même parcours qu'à la création : preview/édition du brief.
-        router.push(`/campaigns/${campaign!.id}/brief`);
-        return;
-      }
-      await load();
-    } finally {
-      setBriefImportBusy(false);
-    }
-  }
-
   async function decide(decision: "GO" | "NO_GO") {
     await fetch(`/api/campaigns/${campaign!.id}/decision`, {
       method: "POST",
@@ -282,24 +262,14 @@ export default function CampaignPage({
         {/* Chemin de secours : campagne créée sans brief (ou import raté à la
             création) — sans ça, aucun moyen de poser le brief après coup. */}
         {!campaign.briefGrid && !campaign.briefRaw && (
-          <label
-            className="btn cursor-pointer"
+          <a
+            href={`/campaigns/${campaign.id}/brief/paste`}
+            className="btn"
             style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
-            title="This campaign has no brief — the QA needs it (languages, copy, links, tracking)"
+            title="This campaign has no brief — the QA needs it (languages, copy, links, tracking). Import it from the Brief & template page."
           >
-            {briefImportBusy ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-            {briefImportBusy ? "Importing brief…" : "Import brief"}
-            <input
-              type="file"
-              className="hidden"
-              accept=".xlsx,.xlsm,.xls,.pdf,.pptx,.ppt"
-              disabled={briefImportBusy}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) importBriefFile(f);
-              }}
-            />
-          </label>
+            <Upload size={14} /> Add the brief
+          </a>
         )}
         <div className="ml-auto flex items-center gap-2">
           {campaign.humanDecision ? (
